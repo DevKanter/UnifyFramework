@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Unify.ClientSide
 {
-    internal class UnifyClient
+    public class UnifyClient
     {
     }
 }
