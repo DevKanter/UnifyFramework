@@ -1,13 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Unify.Common;
 
 namespace Unify
 {
-    public abstract class Packet
+    public abstract class Packet : ISizable
     {
-        internal abstract byte[] GetBytes();
+        public byte[] GetBytes()
+        {
+            var buffer = new ByteBuffer(GetSize());
+            GetBytes(buffer);
+            return buffer.GetData();
+        }
+        public abstract void GetBytes(ByteBuffer buffer);
+        public abstract int GetSize();
     }
+
+    public interface ISizable
+    {
+        int GetSize();
+    }
+    
 }

@@ -23,7 +23,7 @@ namespace Unify.Server
         }
 
 
-        public void StartListening(IPAddress ipAddress, int port)
+        private void StartListening(IPAddress ipAddress, int port)
         {
             // Bind the socket to the local endpoint and listen for incoming connections.  
             try
@@ -51,7 +51,7 @@ namespace Unify.Server
             }
         }
 
-        public void AcceptCallback(IAsyncResult ar)
+        private void AcceptCallback(IAsyncResult ar)
         {
             _allDone.Set();
             // Get the socket that handles the client request.  
@@ -74,7 +74,7 @@ namespace Unify.Server
             }
         }
 
-        public void ReadCallback(IAsyncResult ar)
+        private void ReadCallback(IAsyncResult ar)
         {
             var connection = (Connection<T>) ar.AsyncState;
             Socket handler = connection.Socket;
@@ -98,31 +98,9 @@ namespace Unify.Server
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                Console.WriteLine($"Connection[{connection.ID}] closed!");
             }
         }
 
-        private void Send(Socket handler, byte[] data)
-        {
-            // Begin sending the data to the remote device.  
-            handler.BeginSend(data, 0, data.Length, 0,
-                SendCallback, handler);
-        }
-
-        private void SendCallback(IAsyncResult ar)
-        {
-            try
-            {
-                // Retrieve the socket from the state object.  
-                Socket handler = (Socket) ar.AsyncState;
-
-                // Complete sending the data to the remote device.  
-                handler.EndSend(ar);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-        }
     }
 }
