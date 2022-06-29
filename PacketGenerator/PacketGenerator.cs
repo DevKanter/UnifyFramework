@@ -2,95 +2,41 @@
 using Microsoft.CodeAnalysis.Text;
 using PacketGenerator.Definitions;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Text;
+using System.Configuration;
 
 namespace PacketGenerator
 {
     [Generator]
-    public class TestGenerator : ISourceGenerator
+    public class PacketGenerator : ISourceGenerator
     {
-        private readonly string header = @"using Unify;
-using Unify.Common;
+        private const string path = @"C:\Users\it_ah\source\repos\UnifyFramework\Definitions\";
 
-namespace PacketLib
-{";
+        private List<ClassDefinition> _classDefinitions;
+        private List<PacketClass> _serverPackets;
+        private List<PacketClass> _clientPackets;
+        private List<EnumDefinition> _enumDefinitions;
+        private Dictionary<string, List<string>> _categories;
+
+        private GeneratorExecutionContext _context;
         public void Execute(GeneratorExecutionContext context)
         {
-            var lines = new[]
+            _context = context;
+
+            foreach (var enumDef in _enumDefinitions)
             {
-                "S2CHello;Key:int,Name:string",
-                "CharacterData;x:int,y:int,z:int",
-                "C2SHello;Key:int,IpAddress:string,CharData:CharacterData"
-            };
-            
-            foreach (var line in lines)
-            {
-                var def = ParsePacketDefinition(line);
-
-                var sb = new StringBuilder();
-                var classDef = $"\n\tpublic class {def.Name} : Packet";
-                sb.Append(header);
-                sb.Append(classDef);
-                sb.Append("\n\t{\n");
-                foreach(var prop in def.Properties)
-                {
-                    sb.AppendLine($"\t\tpublic {prop.Type} {prop.Name};");
-                }
-                sb.Append("\t\t");
-                sb.Append(@"public override void GetBytes(ByteBuffer buffer)");
-                sb.Append("\n\t\t{\n");
-                foreach (var prop in def.Properties)
-                {
-                    sb.AppendLine($"\t\t\t{GetBufferString(prop)};");
-                }
-                sb.Append("\n\t\t}\n");
-                sb.AppendLine();
-                sb.Append("\t\t");
-                sb.Append(@"public override int GetSize()");
-                sb.Append("\n\t\t{\n");
-                sb.Append("\t\t\treturn ");
-                foreach (var prop in def.Properties)
-                {
-                    sb.Append(GetSizeString(prop));
-                    sb.Append(" + ");
-                }
-                sb.Remove(sb.Length - 3, 3);
-                sb.Append(";");
-                sb.Append("\n\t\t}\n");
-                sb.Append("\n\t}\n");
-                sb.Append("\n}\n");
-
-
-                context.AddSource($"{def.Name}.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
+                GenerateEnumClass(enumDef);
             }
-
-            
-
-//                var code = @"
-//using Unify;
-//using Unify.Common;
-
-//namespace PacketLib
-//{
-//    public class S2CHello : Packet
-//    {
-//        public int Key;
-//        public override void GetBytes(ByteBuffer buffer)
-//        {
-//            buffer.WriteInt32(Key);
-//        }
-
-//        public override int GetSize()
-//        {
-//            return sizeof(int);
-//        }
-//    }
-//}
-
-//";
-
-            
+            foreach (var classDefinition in _classDefinitions)
+            {
+                GenerateClass(classDefinition);
+            }
+            var partialClient = new UnifyClientClass(_serverPackets.ToArray());
+            GenerateClass(partialClient);
 
         }
 
@@ -102,19 +48,75 @@ namespace PacketLib
 //                Debugger.Launch();
 //            }
 //#endif
-            Debug.WriteLine("Initalize code generator");
+            Debug.WriteLine("Initalize packet generator");
+            _classDefinitions = new List<ClassDefinition>();
+            _enumDefinitions = new List<EnumDefinition>();
+            _serverPackets = new List<PacketClass>();
+            _clientPackets = new List<PacketClass>();
+            _categories = new Dictionary<string, List<string>>();
+            LoadPacketDefinitions();
+            LoadDataDefinitions();
+            LoadEnumDefinitions();
         }
-
-        private PacketDefinition ParsePacketDefinition(string line)
+        private void LoadPacketDefinitions()
         {
-            //"S2CHello;Key:int,Name:string"
-            var definition = new PacketDefinition();
+            var lines = File.ReadAllLines($"{path}PacketDefinitions.txt");
+            Debug.WriteLine($"{lines.Length} packets found!");
 
-            var name = line.Split(';')[0];
-            var props = line.Split(';')[1].Split(',');
+            foreach (var line in lines)
+            {
+                _classDefinitions.Add(ParsePacketDefinition(line));
+            }
+        }
+        private void LoadDataDefinitions()
+        {
+            var lines = File.ReadAllLines($"{path}DataDefinitions.txt");
+            Debug.WriteLine($"{lines.Length} data packets found!");
 
-            definition.Name = name;
-            definition.Properties = new PropertyDefinition[props.Length];
+            foreach (var line in lines)
+            {
+                _classDefinitions.Add(ParseDataClass(line));
+            }
+        }
+        private void LoadEnumDefinitions()
+        {
+            foreach (var category in _categories)
+            {
+                _enumDefinitions.Add(new EnumDefinition($"{category.Key}ID", category.Value.ToArray()));
+            }
+            string[] keys = new string[_categories.Keys.Count];
+            _categories.Keys.CopyTo(keys, 0);
+            _enumDefinitions.Add(new EnumDefinition("PacketCategory", keys));
+        }
+        private DataClass ParseDataClass(string line)
+        {
+            var split = line.Split(';');
+            var name = split[0];
+            var props = split[1].Split(',');
+
+            var properties = ParseProperties(props);
+
+            return new DataClass(name, properties);
+        }
+        private PacketClass ParsePacketDefinition(string line)
+        {
+            var split = line.Split(';');
+            var name = split[0];
+            var type = (PacketType) int.Parse(split[1]);
+            var category = split[2];
+            var props = split[3].Split(',');
+
+            var properties = ParseProperties(props);
+
+            ParseCategory(category, name);
+            var packetClass = new PacketClass(name, type, category, properties);
+            if (type == PacketType.ServerPacket) _serverPackets.Add(packetClass);
+            else if (type == PacketType.ClientPacket) _clientPackets.Add(packetClass);
+            return packetClass;
+        }
+        private PropertyDefinition[] ParseProperties(string[] props)
+        {
+            var properties = new PropertyDefinition[props.Length];
 
             for (int i = 0; i < props.Length; i++)
             {
@@ -123,30 +125,29 @@ namespace PacketLib
                 propDef.Name = prop.Split(':')[0];
                 propDef.Type = prop.Split(':')[1];
 
-                definition.Properties[i] = propDef;
-            }
-            return definition;
-        }
-        private string GetBufferString(PropertyDefinition prop)
-        {
-            switch (prop.Type)
-            {
-                case "int": return $"buffer.WriteInt32({prop.Name})";
-                case "string": return $"buffer.WriteString({prop.Name})";
-                default:
-                    return $"{prop.Name}.GetBytes(buffer)";
+                properties[i] = propDef;
             }
 
+            return properties;
         }
-        private string GetSizeString(PropertyDefinition prop)
+        private void ParseCategory(string category,string name)
         {
-            switch (prop.Type)
+            if (!_categories.ContainsKey(category))
             {
-                case "int": return "sizeof(int)";
-                case "string": return $"{prop.Name}.Length + 1";
-                default:
-                    return $"{prop.Name}.GetSize()";
+                _categories[category] = new List<string>(byte.MaxValue);
+        
             }
+            _categories[category].Add(name);
+        }
+        private void GenerateClass(ClassDefinition classDefinition)
+        {
+            Debug.WriteLine($"Generating Packet[{classDefinition.Name}]");
+            _context.AddSource($"{classDefinition.Name}.g.cs", SourceText.From(classDefinition.ToString(), Encoding.UTF8));
+        }
+        private void GenerateEnumClass(EnumDefinition enumDefinition)
+        {
+            _context.AddSource($"{enumDefinition.Name}.g.cs", SourceText.From(enumDefinition.ToString(), Encoding.UTF8));
+
         }
     }
 

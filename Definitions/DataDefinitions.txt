@@ -1,0 +1,1 @@
+CharacterData;x:int,y:int,z:int

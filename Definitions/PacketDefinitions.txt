@@ -1,0 +1,4 @@
+S2CHello;0;Authentification;Key:int,Name:string
+C2SHello;1;Authentification;Key:int,IpAddress:string,CharData:CharacterData
+S2CAuth;0;Authentification;Number:int
+S2CVerify;0;Authentification;help:string

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Unify.Common;
 using Unify.Server;
+using PacketLib;
 
 namespace UnifyFramework.Server
 {
@@ -17,7 +18,11 @@ namespace UnifyFramework.Server
         protected override void OnConnect(Connection<T> connection)
         {
             Console.WriteLine($"New Connection[{connection.ID}]");
-            var packet = new PacketLib.S2CHello();
+            var packet = new S2CHello()
+            {
+                Key = 123,
+                Name = "Hallo"
+            };
             connection.Send(packet);
         }
 
